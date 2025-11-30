@@ -7,8 +7,6 @@ Console.WriteLine("=== Data Service Abstraction Demo ===");
 
 var logger = new ConsoleLogger();
 
-// ASSUMPTION: Testing with enterprise-scale datasets (1M+ records)
-// QUESTION: Should we implement async patterns like other platform services?
 
 try
 {
@@ -27,8 +25,8 @@ static async Task Run(ILogger logger)
 
     if (!File.Exists(dataPath))
     {
-        Console.WriteLine("   Generating default dataset...");
-        CreateDirectory(dataPath);
+        Console.WriteLine("   Generating sample dataset...");
+        CreateDataFile(dataPath);
     }
 
     IDataService baseService = new FileDataService(dataPath, logger);
@@ -37,10 +35,10 @@ static async Task Run(ILogger logger)
     var count = baseService.GetLines().Take(100000).Count();
     stopwatch.Stop();
 
-    Console.WriteLine($"   Processed: {count:N0} lines in {stopwatch.ElapsedMilliseconds}ms\n");
+    Console.WriteLine($"Processed: {count:N0} lines in {stopwatch.ElapsedMilliseconds}ms\n");
 
-    // 2. PERFORMANCE: Cached service following Redis patterns
-    Console.WriteLine("🔸 High-Performance Caching (5-minute TTL):");
+    // 2. PERFORMANCE: Cached
+    Console.WriteLine("High-Performance Caching (5-minute TTL):");
     IDataService cachedService = new CachedDataService(baseService, TimeSpan.FromMinutes(5), logger);
 
     // First call - cache miss
@@ -56,18 +54,18 @@ static async Task Run(ILogger logger)
     Console.WriteLine($"   First call: {lines1:N0} lines in {sw1.ElapsedMilliseconds}ms");
     Console.WriteLine($"   Cached call: {lines2:N0} lines in {sw2.ElapsedMilliseconds}ms (speedup: {sw1.ElapsedMilliseconds / (double)sw2.ElapsedMilliseconds:F1}x)\n");
 
-    IDataService enterpriseService = new LoggingDataService(
+    IDataService logservice = new LoggingDataService(
         new CachedDataService(
-            new FileDataService(Path.Combine(Directory.GetCurrentDirectory(), "data", "composed.txt"), logger),
+            new FileDataService(dataPath, logger),
             TimeSpan.FromMinutes(10),
             logger),
-        message => logger.LogInformation(message)); // Adapt ILogger to Action<string>
+        message => logger.LogInformation(message));
 
-    var enterpriseCount = enterpriseService.GetLines().Take(75000).Count();
+    var enterpriseCount = logservice.GetLines().Take(75000).Count();
     Console.WriteLine($"   Enterprise pipeline: {enterpriseCount:N0} lines processed\n");
 }
 
-static void CreateDirectory(string path)
+static void CreateDataFile(string path)
 {
     Directory.CreateDirectory(Path.GetDirectoryName(path)!);
     File.WriteAllLines(path, Enumerable.Range(1, 1_000_000).Select(i => $"Line {i}"));
